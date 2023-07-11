@@ -1,0 +1,110 @@
+# PySpark library in Azure Databricks to extract data from the flat files. 
+# putting the CSV files into a PySpark DataFrame and utilise that to alter the data after that.
+
+# Import required libraries
+from pyspark.sql.functions import col
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType
+from pyspark.sql import SparkSession
+
+# Create a SparkSession
+spark = SparkSession.builder.appName("music-data-etl").getOrCreate()
+
+# Define the schema for the CSV files
+schema = StructType([
+  StructField("album_id", IntegerType(), True),
+  StructField("album_name", StringType(), True),
+  StructField("artist_id", IntegerType(), True),
+  StructField("artist_name", StringType(), True),
+  StructField("release_date", StringType(), True),
+  StructField("genre", StringType(), True),
+  StructField("rating", DoubleType(), True)
+])
+
+# Load the CSV files into a PySpark DataFrame
+df_csv = spark.read.csv("wasbs://path/to/csv/files/*.csv", header=True, schema=schema)
+
+------------------------------------------------------------------------------------------
+# Using the Python PyODBC package, to establish a connection to the SQL Server database and run SQL queries to retrieve the desired data.
+
+# Import required libraries
+import pyodbc
+
+# Connect to the SQL Server database
+conn = pyodbc.connect("Driver={SQL Server};"
+                      "Server=server_name;"
+                      "Database=database_name;"
+                      "Trusted_Connection=yes;")
+
+# Execute a SQL query to retrieve the data
+cursor = conn.cursor()
+query = "SELECT * FROM album_data"
+cursor.execute(query)
+
+# Load the retrieved data into a list of dictionaries
+data = []
+for row in cursor:
+    album = {
+        "album_id": row[0],
+        "album_name": row[1],
+        "artist_id": row[2],
+        "artist_name": row[3],
+        "release_date": row[4].strftime("%Y-%m-%d"),
+        "genre": row[5],
+        "rating": row[6]
+    }
+    data.append(album)
+
+# Convert the list of dictionaries into a PySpark DataFrame
+df_sql = spark.createDataFrame(data)
+
+-------------------------------------------------------------------------------------------------------
+
+#transform
+
+# Transform the flat file data
+df_csv = df_csv.filter(col("album_id").isNotNull() & col("album_name").isNotNull())
+df_csv = df_csv.withColumnRenamed("album_id", "id").withColumnRenamed("album_name", "name").withColumnRenamed("artist_id", "artist_id").withColumnRenamed("artist_name", "artist_name").withColumnRenamed("releasedate", "release_date").withColumnRenamed("genre", "genre").withColumnRenamed("rating", "rating")
+
+# Transform the SQL Server data
+df_sql = df_sql.filter(col("id").isNotNull() & col("name").isNotNull())
+df_sql = df_sql.withColumnRenamed("id", "id").withColumnRenamed("name", "name").withColumnRenamed("artist_id", "artist_id").withColumnRenamed("artist_name", "artist_name").withColumnRenamed("release_date", "release_date").withColumnRenamed("genre", "genre").withColumnRenamed("rating", "rating")
+
+------------------------------------------------------------------------------------------------------------
+## Loading data into Snowflake
+
+# Import required libraries
+from snowflake.connector import connect
+
+# Connect to the Snowflake database
+conn = connect(
+user='user',
+password='password',
+account='account',
+warehouse='warehouse',
+database='database',
+schema='schema'
+)
+
+# Create a Snowflake cursor
+cursor = conn.cursor()
+
+# Create the table in Snowflake
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS album_data (
+id INTEGER,
+name VARCHAR(255),
+artist_id INTEGER,
+artist_name VARCHAR(255),
+release_date DATE,
+genre VARCHAR(255),
+rating DOUBLE
+)
+""")
+
+# Load the transformed data into Snowflake
+df_csv.write.format("snowflake").options(**snowflake_options).option("dbtable", "album_data").mode("append").save()
+df_sql.write.format("snowflake").options(**snowflake_options).option("dbtable", "album_data").mode("append").save()
+
+# Close the Snowflake connection
+cursor.close()
+conn.close()
