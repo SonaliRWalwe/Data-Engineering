@@ -2,9 +2,9 @@
 tasks and solutions
 
 - Data modelling
--- Conceptual Data Modeling
--- Logical Data Modeling
--- Physical Data Modeling
+  - Conceptual Data Modeling
+  - Logical Data Modeling
+  - Physical Data Modeling
 - database design
 - data warehousing
 - Data Governance
