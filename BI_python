@@ -1,0 +1,123 @@
+# Imports
+import pandas as pd
+import plotly.graph_objs as go
+import dash
+from dash import dcc
+from dash import html
+from dash.dependencies import Input, Output
+import requests
+import io
+import os
+
+---------------------------------------------------------
+
+# Load data
+
+# Set the URL for the GitHub repository
+url = 'https://github.com/CSSEGISandData/COVID-19/tree/master/csse_covid_19_data/csse_covid_19_daily_reports/'
+
+# Get a list of all CSV files in the repository with full_path
+csv_full_path = []
+response = requests.get(url)
+if response.status_code == 200:
+    page_html = response.content.decode('utf-8')
+    for line in page_html.split('\n'):
+        if '.csv' in line:
+            csv_full_path.append(line.split('href="')[1].split('"')[0])
+
+# Get a list of all CSV files
+all_csv_files = []
+            
+for file in range(len(csv_full_path)):
+    all_csv_files.append(csv_full_path[file].split('/')[-1])   
+
+# Get a list of required CSV files
+csv_files = []
+
+start_index = all_csv_files.index('01-01-2021.csv')
+end_index   = all_csv_files.index('01-12-2023.csv')
+
+for file in range(start_index, end_index + 1):
+    csv_files.append(all_csv_files[file].split('/')[-1])
+
+# Loop through each CSV file, read it into a Pandas DataFrame, and append it to a list
+data_frames = []
+for file_name in csv_files:
+    # Construct the URL for the file
+    raw_url = 'https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/'
+    file_url = raw_url + file_name
+    # Read the file into a DataFrame
+    response = requests.get(file_url)
+    if response.status_code == 200:
+        file_content = io.StringIO(response.content.decode('utf-8'))
+        df = pd.read_csv(file_content, sep=',', on_bad_lines='skip')
+        data_frames.append(df)
+
+# Concatenate all DataFrames into a single DataFrame
+df = pd.concat(data_frames, ignore_index=True)
+
+--------------------------------------------------------------------------
+# Drop unnecessary columns
+df = df.drop(['FIPS', 'Admin2', 'Combined_Key'], axis=1)
+
+# Rename columns
+df = df.rename(columns={'Province_State': 'State', 'Country_Region': 'Country', 'Last_Update': 'Date', 'Lat': 'Latitude', 'Long_': 'Longitude'})
+
+# Convert date column to datetime format
+df['Date'] = pd.to_datetime(df['Date'])
+
+--------------------------------------------------------------------------------
+
+
+# Create app
+app = dash.Dash(__name__)
+
+df_combined = df
+
+# Define data
+df_by_country = df_combined.groupby(['Country'])['Confirmed'].sum().reset_index()
+df_by_country = df_by_country.sort_values(by=['Confirmed'], ascending=False)
+df_by_date = df_combined.groupby(['Date'])[['Confirmed', 'Deaths', 'Recovered']].sum().reset_index()
+df_by_date_melted = df_by_date.melt(id_vars=['Date'], var_name='Case Type', value_name='Cases')
+
+# Define layout
+app.layout = html.Div(children=[
+    html.H1(children='COVID-19 Dashboard'),
+    html.Div(children='''This dashboard shows COVID-19 data by country and over time.'''),
+
+    dcc.Graph(
+        id='confirmed-by-country',
+        figure={
+            'data': [
+                go.Bar(x=df_by_country['Country'], y=df_by_country['Confirmed'])
+            ],
+            'layout': go.Layout(
+                title='Confirmed Cases by Country',
+                xaxis={'title': 'Country'},
+                yaxis={'title': 'Confirmed Cases'}
+            )
+        }
+    ),
+
+    dcc.Graph(
+        id='cases-over-time',
+                figure={
+                    'data': [
+                        go.Scatter(x=df_by_date_melted[df_by_date_melted['Case Type'] == 'Confirmed']['Date'], y=df_by_date_melted[df_by_date_melted['Case Type'] == 'Confirmed']['Cases'], name='Confirmed'),
+                        go.Scatter(x=df_by_date_melted[df_by_date_melted['Case Type'] == 'Deaths']['Date'], y=df_by_date_melted[df_by_date_melted['Case Type'] == 'Deaths']['Cases'], name='Deaths'),
+                        go.Scatter(x=df_by_date_melted[df_by_date_melted['Case Type'] == 'Recovered']['Date'], y=df_by_date_melted[df_by_date_melted['Case Type'] == 'Recovered']['Cases'], name='Recovered')
+                        ],
+                    'layout': go.Layout(
+                        title='Cases over Time',
+                        xaxis={'title': 'Date'},
+                        yaxis={'title': 'Number of Cases'}
+                        )
+                    }
+        )
+    ])
+
+# Run app
+if __name__ == '__main__':
+    app.run_server(debug=False)
+
+--------------------------------------------------------------------
