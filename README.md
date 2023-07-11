@@ -2,6 +2,9 @@
 tasks and solutions
 
 - Data modelling
+-- Conceptual Data Modeling
+-- Logical Data Modeling
+-- Physical Data Modeling
 - database design
 - data warehousing
 - Data Governance
@@ -9,6 +12,7 @@ tasks and solutions
 - ETL (Extract, Transform, Load) processing
 - big data processing
 - machine learning
+
 are just a few of the technical capabilities needed for data engineering.
 
 The main task is to make sure that the data infrastructure systems are dependable, effective, and scalable
